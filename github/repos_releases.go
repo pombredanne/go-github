@@ -6,8 +6,11 @@
 package github
 
 import (
+	"errors"
 	"fmt"
-	"io"
+	"mime"
+	"os"
+	"path/filepath"
 )
 
 // RepositoryRelease represents a GitHub release in a repository.
@@ -59,7 +62,6 @@ func (s *RepositoriesService) ListReleases(owner, repo string) ([]RepositoryRele
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	releases := new([]RepositoryRelease)
 	resp, err := s.client.Do(req, releases)
@@ -79,7 +81,6 @@ func (s *RepositoriesService) GetRelease(owner, repo string, id int) (*Repositor
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	release := new(RepositoryRelease)
 	resp, err := s.client.Do(req, release)
@@ -99,7 +100,6 @@ func (s *RepositoriesService) CreateRelease(owner, repo string, release *Reposit
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	r := new(RepositoryRelease)
 	resp, err := s.client.Do(req, r)
@@ -119,7 +119,6 @@ func (s *RepositoriesService) EditRelease(owner, repo string, id int, release *R
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	r := new(RepositoryRelease)
 	resp, err := s.client.Do(req, r)
@@ -139,7 +138,6 @@ func (s *RepositoriesService) DeleteRelease(owner, repo string, id int) (*Respon
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 	return s.client.Do(req, nil)
 }
 
@@ -153,7 +151,6 @@ func (s *RepositoriesService) ListReleaseAssets(owner, repo string, id int) ([]R
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	assets := new([]ReleaseAsset)
 	resp, err := s.client.Do(req, assets)
@@ -173,7 +170,6 @@ func (s *RepositoriesService) GetReleaseAsset(owner, repo string, id int) (*Rele
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	asset := new(ReleaseAsset)
 	resp, err := s.client.Do(req, asset)
@@ -193,7 +189,6 @@ func (s *RepositoriesService) EditReleaseAsset(owner, repo string, id int, relea
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 
 	asset := new(ReleaseAsset)
 	resp, err := s.client.Do(req, asset)
@@ -213,25 +208,33 @@ func (s *RepositoriesService) DeleteReleaseAsset(owner, repo string, id int) (*R
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
 	return s.client.Do(req, nil)
 }
 
 // UploadReleaseAsset creates an asset by uploading a file into a release repository.
+// To upload assets that cannot be represented by an os.File, call NewUploadRequest directly.
 //
 // GitHub API docs : http://developer.github.com/v3/repos/releases/#upload-a-release-asset
-func (s *RepositoriesService) UploadReleaseAsset(owner, repo string, id int, opt *UploadOptions, reader io.Reader, contentType string) (*ReleaseAsset, *Response, error) {
+func (s *RepositoriesService) UploadReleaseAsset(owner, repo string, id int, opt *UploadOptions, file *os.File) (*ReleaseAsset, *Response, error) {
 	u := fmt.Sprintf("repos/%s/%s/releases/%d/assets", owner, repo, id)
 	u, err := addOptions(u, opt)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	req, err := s.client.NewUploadRequest(u, reader, contentType)
+	stat, err := file.Stat()
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Add("Accept", mimeReleasePreview)
+	if stat.IsDir() {
+		return nil, nil, errors.New("The asset to upload can't be a directory")
+	}
+
+	mediaType := mime.TypeByExtension(filepath.Ext(file.Name()))
+	req, err := s.client.NewUploadRequest(u, file, stat.Size(), mediaType)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	asset := new(ReleaseAsset)
 	resp, err := s.client.Do(req, asset)

@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -20,7 +20,6 @@ func TestRepositoriesService_ListReleases(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
@@ -40,7 +39,6 @@ func TestRepositoriesService_GetRelease(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/1", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		fmt.Fprint(w, `{"id":1}`)
 	})
 
@@ -66,7 +64,6 @@ func TestRepositoriesService_CreateRelease(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(v)
 
 		testMethod(t, r, "POST")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		if !reflect.DeepEqual(v, input) {
 			t.Errorf("Request body = %+v, want %+v", v, input)
 		}
@@ -95,7 +92,6 @@ func TestRepositoriesService_EditRelease(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(v)
 
 		testMethod(t, r, "PATCH")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		if !reflect.DeepEqual(v, input) {
 			t.Errorf("Request body = %+v, want %+v", v, input)
 		}
@@ -118,7 +114,6 @@ func TestRepositoriesService_DeleteRelease(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/1", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "DELETE")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 	})
 
 	_, err := client.Repositories.DeleteRelease("o", "r", 1)
@@ -133,7 +128,6 @@ func TestRepositoriesService_ListReleaseAssets(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/1/assets", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
@@ -153,7 +147,6 @@ func TestRepositoriesService_GetReleaseAsset(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		fmt.Fprint(w, `{"id":1}`)
 	})
 
@@ -178,7 +171,6 @@ func TestRepositoriesService_EditReleaseAsset(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(v)
 
 		testMethod(t, r, "PATCH")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 		if !reflect.DeepEqual(v, input) {
 			t.Errorf("Request body = %+v, want %+v", v, input)
 		}
@@ -201,7 +193,6 @@ func TestRepositoriesService_DeleteReleaseAsset(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "DELETE")
-		testHeader(t, r, "Accept", mimeReleasePreview)
 	})
 
 	_, err := client.Repositories.DeleteReleaseAsset("o", "r", 1)
@@ -216,16 +207,22 @@ func TestRepositoriesService_UploadReleaseAsset(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/1/assets", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "POST")
-		testHeader(t, r, "Accept", mimeReleasePreview)
-		testHeader(t, r, "Content-Type", "application/zip")
+		testHeader(t, r, "Content-Type", "text/plain; charset=utf-8")
+		testHeader(t, r, "Content-Length", "12")
 		testFormValues(t, r, values{"name": "n"})
+		testBody(t, r, "Upload me !\n")
 
 		fmt.Fprintf(w, `{"id":1}`)
 	})
 
+	file, dir, err := openTestFile("upload.txt", "Upload me !\n")
+	if err != nil {
+		t.Fatalf("Unable to create temp file: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
 	opt := &UploadOptions{Name: "n"}
-	data := strings.NewReader("data")
-	asset, _, err := client.Repositories.UploadReleaseAsset("o", "r", 1, opt, data, "application/zip")
+	asset, _, err := client.Repositories.UploadReleaseAsset("o", "r", 1, opt, file)
 	if err != nil {
 		t.Errorf("Repositories.UploadReleaseAssert returned error: %v", err)
 	}
